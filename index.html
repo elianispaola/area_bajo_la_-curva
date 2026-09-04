@@ -1,292 +1,201 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador de Área Bajo la Curva por IA</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8">
+  <title>Simulador de Sumas de Riemann</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; background: #f9f9f9; }
+    .container { display: flex; gap: 20px; flex-wrap: wrap; }
+    .controls { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 300px; }
+    .canvas-container { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    textarea { width: 100%; height: 100px; }
+    select, input[type="range"] { width: 100%; }
+    .result { margin-top: 15px; padding: 10px; background: #eef; border-radius: 4px; font-weight: bold; }
+  </style>
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans leading-relaxed">
+<body>
 
-    <div class="max-w-6xl mx-auto px-4 py-8">
-        <header class="mb-8 text-center">
-            <h1 class="text-3xl font-extrabold text-indigo-600 mb-2">Simulador de Área Bajo la Curva</h1>
-            <p class="text-gray-600">Estima el área a partir de datos discretos usando sumas de Riemann (Izquierda, Derecha, Punto Medio) y Trapecios.</p>
-        </header>
+<h2>Simulación de Área bajo la Curva (Sumas de Riemann)</h2>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md border border-gray-100 flex flex-col justify-between">
-                <div>
-                    <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">1. Pares de Datos (X, Y)</h2>
-                    <p class="text-sm text-gray-500 mb-4">Ingresa o modifica los puntos medidos:</p>
-                    
-                    <div id="data-inputs" class="space-y-2 max-h-60 overflow-y-auto pr-2 mb-4">
-                        </div>
+<div class="container">
+  <div class="controls">
+    <label for="dataInput">Puntos (Tiempo, Valor):</label>
+    <textarea id="dataInput">0, 2
+2, 5
+4, 3
+6, 8
+8, 6
+10, 9</textarea>
 
-                    <div class="flex gap-2 mb-6">
-                        <button onclick="addRow()" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-2 px-3 rounded-lg text-sm transition border border-indigo-200">+ Añadir Punto</button>
-                        <button onclick="loadDefaultData()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg text-sm transition">Restaurar</button>
-                    </div>
+    <label for="methodSelect">Método de evaluación:</label>
+    <select id="methodSelect">
+      <option value="left">Por la Izquierda</option>
+      <option value="right">Por la Derecha</option>
+      <option value="midpoint">Punto Medio (Centro)</option>
+    </select>
 
-                    <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">2. Configuración de Cálculo</h2>
-                    
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Método de Altura:</label>
-                        <select id="method-select" onchange="updateSimulation()" class="w-full border-gray-300 rounded-lg shadow-sm border p-2 focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="left">Extremo Izquierdo</option>
-                            <option value="right">Extremo Derecho</option>
-                            <option value="midpoint" selected>Punto Medio</option>
-                            <option value="trapezoid">Regla del Trapecio</option>
-                        </select>
-                    </div>
+    <label for="rectSlider">Número de Rectángulos (N): <span id="rectVal">6</span></label>
+    <input type="range" id="rectSlider" min="1" max="50" value="6">
 
-                    <div class="mb-4">
-                        <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
-                            <span>Número de Intervalos ($n$):</span>
-                            <span id="n-value" class="font-bold text-indigo-600">5</span>
-                        </div>
-                        <input type="range" id="n-slider" min="1" max="50" value="5" oninput="updateSimulation()" class="w-full accent-indigo-600">
-                    </div>
-                </div>
+    <div class="result" id="resultArea">Área estimada: 0</div>
+  </div>
 
-                <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-center mt-4">
-                    <span class="text-xs font-bold uppercase tracking-wider text-indigo-500 block mb-1">Área Estimada Total</span>
-                    <span id="result-area" class="text-3xl font-black text-indigo-700">0.00</span>
-                </div>
-            </div>
+  <div class="canvas-container">
+    <canvas id="plotCanvas" width="600" height="400"></canvas>
+  </div>
+</div>
 
-            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-gray-100 flex flex-col justify-center">
-                <div class="relative w-full h-[450px]">
-                    <canvas id="curveChart"></canvas>
-                </div>
-                <div class="mt-4 text-xs text-gray-500 text-center">
-                    * La línea azul representa la interpolación lineal entre los datos medidos. Las figuras representan la aproximación numérica seleccionada.
-                </div>
-            </div>
-        </div>
-    </div>
+<script>
+// Referencias del DOM
+const dataInput = document.getElementById('dataInput');
+const methodSelect = document.getElementById('methodSelect');
+const rectSlider = document.getElementById('rectSlider');
+const rectVal = document.getElementById('rectVal');
+const resultArea = document.getElementById('resultArea');
+const canvas = document.getElementById('plotCanvas');
+const ctx = canvas.getContext('2d');
 
-    <script>
-        // Datos iniciales por defecto (Tiempo, Variable)
-        let dataPoints = [
-            { x: 0, y: 2 },
-            { x: 1, y: 3.5 },
-            { x: 2, y: 3 },
-            { x: 3, y: 5 },
-            { x: 4, y: 4.5 },
-            { x: 5, y: 6 }
-        ];
+// Parámetros de la vista del Canvas
+const padding = 40;
 
-        let chartInstance = null;
+// Parsea y ordena el texto introducido
+function parsePoints() {
+  const lines = dataInput.value.trim().split('\n');
+  const points = [];
+  for (let line of lines) {
+    const parts = line.split(',');
+    if (parts.length === 2) {
+      const x = parseFloat(parts[0].trim());
+      const y = parseFloat(parts[1].trim());
+      if (!isNaN(x) && !isNaN(y)) {
+        points.push({ x, y });
+      }
+    }
+  }
+  return points.sort((a, b) => a.x - b.x);
+}
 
-        // Inicializar la aplicación al cargar la página
-        window.onload = function() {
-            renderTable();
-            updateSimulation();
-        };
+// Interpolación lineal entre los datos experimentales
+function interpolate(x, points) {
+  if (points.length === 0) return 0;
+  if (x <= points[0].x) return points[0].y;
+  if (x >= points[points.length - 1].x) return points[points.length - 1].y;
 
-        function renderTable() {
-            const container = document.getElementById('data-inputs');
-            container.innerHTML = '';
-            dataPoints.forEach((pt, index) => {
-                const row = document.createElement('div');
-                row.className = 'flex items-center gap-2';
-                row.innerHTML = `
-                    <span class="text-xs text-gray-400 w-4">${index + 1}.</span>
-                    <input type="number" step="any" value="${pt.x}" onchange="updatePoint(${index}, 'x', this.value)" class="w-1/2 border rounded px-2 py-1 text-sm border-gray-300" placeholder="X">
-                    <input type="number" step="any" value="${pt.y}" onchange="updatePoint(${index}, 'y', this.value)" class="w-1/2 border rounded px-2 py-1 text-sm border-gray-300" placeholder="Y">
-                    <button onclick="removeRow(${index})" class="text-red-400 hover:text-red-600 font-bold px-2 text-sm">&times;</button>
-                `;
-                container.appendChild(row);
-            });
-        }
+  for (let i = 0; i < points.length - 1; i++) {
+    if (x >= points[i].x && x <= points[i + 1].x) {
+      const t = (x - points[i].x) / (points[i + 1].x - points[i].x);
+      return points[i].y + t * (points[i + 1].y - points[i].y);
+    }
+  }
+  return 0;
+}
 
-        function addRow() {
-            const lastX = dataPoints.length > 0 ? parseFloat(dataPoints[dataPoints.length - 1].x) + 1 : 0;
-            dataPoints.push({ x: lastX, y: 0 });
-            sortData();
-            renderTable();
-            updateSimulation();
-        }
+// Dibujar y calcular
+function draw() {
+  const points = parsePoints();
+  const N = parseInt(rectSlider.value);
+  const method = methodSelect.value;
+  rectVal.textContent = N;
 
-        function removeRow(index) {
-            if (dataPoints.length <= 2) {
-                alert("Se requieren al menos 2 puntos para calcular el área.");
-                return;
-            }
-            dataPoints.splice(index, 1);
-            renderTable();
-            updateSimulation();
-        }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        function updatePoint(index, coord, value) {
-            dataPoints[index][coord] = parseFloat(value) || 0;
-            sortData();
-            renderTable();
-            updateSimulation();
-        }
+  if (points.length < 2) {
+    resultArea.textContent = 'Ingresa al menos 2 puntos válidos.';
+    return;
+  }
 
-        function sortData() {
-            dataPoints.sort((a, b) => a.x - b.x);
-        }
+  // Rango de datos
+  const xMin = points[0].x;
+  const xMax = points[points.length - 1].x;
+  const yMin = 0;
+  const yMax = Math.max(...points.map(p => p.y)) * 1.1;
 
-        function loadDefaultData() {
-            dataPoints = [
-                { x: 0, y: 2 },
-                { x: 1, y: 3.5 },
-                { x: 2, y: 3 },
-                { x: 3, y: 5 },
-                { x: 4, y: 4.5 },
-                { x: 5, y: 6 }
-            ];
-            renderTable();
-            updateSimulation();
-        }
+  // Funciones de mapeo a coordenadas canvas
+  const toCanvasX = (x) => padding + ((x - xMin) / (xMax - xMin)) * (canvas.width - 2 * padding);
+  const toCanvasY = (y) => canvas.height - padding - ((y - yMin) / (yMax - yMin)) * (canvas.height - 2 * padding);
 
-        // Función de interpolación lineal basada en los puntos medidos dados
-        function interpolate(xVal) {
-            if (xVal <= dataPoints[0].x) return dataPoints[0].y;
-            if (xVal >= dataPoints[dataPoints.length - 1].x) return dataPoints[dataPoints.length - 1].y;
+  const dx = (xMax - xMin) / N;
+  let totalArea = 0;
 
-            for (let i = 0; i < dataPoints.length - 1; i++) {
-                let p1 = dataPoints[i];
-                let p2 = dataPoints[i + 1];
-                if (xVal >= p1.x && xVal <= p2.x) {
-                    let slope = (p2.y - p1.y) / (p2.x - p1.x);
-                    return p1.y + slope * (xVal - p1.x);
-                }
-            }
-            return 0;
-        }
+  // 1. Dibujar Rectángulos de Riemann
+  ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
+  ctx.strokeStyle = 'rgba(41, 128, 185, 0.8)';
+  ctx.lineWidth = 1;
 
-        function updateSimulation() {
-            const n = parseInt(document.getElementById('n-slider').value);
-            document.getElementById('n-value').innerText = n;
-            const method = document.getElementById('method-select').value;
+  for (let i = 0; i < N; i++) {
+    const xLeft = xMin + i * dx;
+    const xRight = xLeft + dx;
+    let xEval;
 
-            const xMin = dataPoints[0].x;
-            const xMax = dataPoints[dataPoints.length - 1].x;
-            const dx = (xMax - xMin) / n;
+    if (method === 'left') xEval = xLeft;
+    else if (method === 'right') xEval = xRight;
+    else if (method === 'midpoint') xEval = xLeft + dx / 2;
 
-            let totalArea = 0;
-            let approxDatasets = [];
+    const heightVal = interpolate(xEval, points);
+    totalArea += heightVal * dx;
 
-            // Generar la curva base continua para la gráfica
-            let curvePoints = [];
-            let resolution = 200;
-            let step = (xMax - xMin) / resolution;
-            for (let i = 0; i <= resolution; i++) {
-                let x = xMin + i * step;
-                curvePoints.push({ x: x, y: interpolate(x) });
-            }
+    // Coordenadas en canvas
+    const cxLeft = toCanvasX(xLeft);
+    const cxRight = toCanvasX(xRight);
+    const cyTop = toCanvasY(heightVal);
+    const cyBase = toCanvasY(0);
 
-            // Calcular aproximación por rectángulos o trapecios
-            for (let i = 0; i < n; i++) {
-                let xStart = xMin + i * dx;
-                let xEnd = xStart + dx;
-                let height = 0;
+    ctx.fillRect(cxLeft, cyTop, cxRight - cxLeft, cyBase - cyTop);
+    ctx.strokeRect(cxLeft, cyTop, cxRight - cxLeft, cyBase - cyTop);
+  }
 
-                if (method === 'left') {
-                    height = interpolate(xStart);
-                    approxDatasets.push({
-                        data: [{x: xStart, y: 0}, {x: xStart, y: height}, {x: xEnd, y: height}, {x: xEnd, y: 0}],
-                        borderColor: 'rgba(79, 70, 229, 0.6)',
-                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                        borderWidth: 1,
-                        fill: true,
-                        pointRadius: 0
-                    });
-                    totalArea += height * dx;
-                } else if (method === 'right') {
-                    height = interpolate(xEnd);
-                    approxDatasets.push({
-                        data: [{x: xStart, y: 0}, {x: xStart, y: height}, {x: xEnd, y: height}, {x: xEnd, y: 0}],
-                        borderColor: 'rgba(79, 70, 229, 0.6)',
-                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                        borderWidth: 1,
-                        fill: true,
-                        pointRadius: 0
-                    });
-                    totalArea += height * dx;
-                } else if (method === 'midpoint') {
-                    let xMid = (xStart + xEnd) / 2;
-                    height = interpolate(xMid);
-                    approxDatasets.push({
-                        data: [{x: xStart, y: 0}, {x: xStart, y: height}, {x: xEnd, y: height}, {x: xEnd, y: 0}],
-                        borderColor: 'rgba(79, 70, 229, 0.6)',
-                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                        borderWidth: 1,
-                        fill: true,
-                        pointRadius: 0
-                    });
-                    totalArea += height * dx;
-                } else if (method === 'trapezoid') {
-                    let yStart = interpolate(xStart);
-                    let yEnd = interpolate(xEnd);
-                    approxDatasets.push({
-                        data: [{x: xStart, y: 0}, {x: xStart, y: yStart}, {x: xEnd, y: yEnd}, {x: xEnd, y: 0}],
-                        borderColor: 'rgba(16, 185, 129, 0.6)',
-                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                        borderWidth: 1,
-                        fill: true,
-                        pointRadius: 0
-                    });
-                    totalArea += ((yStart + yEnd) / 2) * dx;
-                }
-            }
+  // 2. Dibujar Área Sombreada Bajo la Curva
+  ctx.beginPath();
+  ctx.moveTo(toCanvasX(points[0].x), toCanvasY(0));
+  for (let p of points) {
+    ctx.lineTo(toCanvasX(p.x), toCanvasY(p.y));
+  }
+  ctx.lineTo(toCanvasX(points[points.length - 1].x), toCanvasY(0));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
+  ctx.fill();
 
-            document.getElementById('result-area').innerText = totalArea.toFixed(4);
+  // 3. Dibujar Curva Interpolada
+  ctx.beginPath();
+  ctx.moveTo(toCanvasX(points[0].x), toCanvasY(points[0].y));
+  for (let p of points) {
+    ctx.lineTo(toCanvasX(p.x), toCanvasY(p.y));
+  }
+  ctx.strokeStyle = '#27ae60';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
 
-            // Renderizar Gráfica con Chart.js
-            const ctx = document.getElementById('curveChart').getContext('2d');
-            
-            if (chartInstance) {
-                chartInstance.destroy();
-            }
+  // 4. Dibujar Puntos Medidos
+  ctx.fillStyle = '#e74c3c';
+  for (let p of points) {
+    ctx.beginPath();
+    ctx.arc(toCanvasX(p.x), toCanvasY(p.y), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-            let mainCurveDataset = {
-                label: 'Curva Medida',
-                data: curvePoints,
-                borderColor: 'rgb(79, 70, 229)',
-                borderWidth: 3,
-                pointRadius: 0,
-                fill: false,
-                type: 'line'
-            };
+  // 5. Dibujar Ejes
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(padding, canvas.height - padding);
+  ctx.lineTo(canvas.width - padding, canvas.height - padding);
+  ctx.moveTo(padding, padding);
+  ctx.lineTo(padding, canvas.height - padding);
+  ctx.stroke();
 
-            let dataPointsScatter = {
-                label: 'Puntos Medidos',
-                data: dataPoints,
-                backgroundColor: 'rgb(220, 38, 38)',
-                pointRadius: 6,
-                type: 'scatter'
-            };
+  // Mostrar Resultado
+  resultArea.textContent = `Área estimada: ${totalArea.toFixed(4)}`;
+}
 
-            chartInstance = new Chart(ctx, {
-                data: {
-                    datasets: [mainCurveDataset, dataPointsScatter, ...approxDatasets]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            type: 'linear',
-                            position: 'bottom',
-                            title: { display: true, text: 'Tiempo / Eje X' }
-                        },
-                        y: {
-                            title: { display: true, text: 'Variable / Eje Y' },
-                            beginAtZero: true
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false }
-                    }
-                }
-            });
-        }
-    </script>
+// Event Listeners
+dataInput.addEventListener('input', draw);
+methodSelect.addEventListener('change', draw);
+rectSlider.addEventListener('input', draw);
+
+// Render inicial
+draw();
+</script>
+
 </body>
 </html>
