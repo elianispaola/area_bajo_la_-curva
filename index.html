@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Área Bajo la Curva por IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans leading-relaxed">
+
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-extrabold text-indigo-600 mb-2">Simulador de Área Bajo la Curva</h1>
+            <p class="text-gray-600">Estima el área a partir de datos discretos usando sumas de Riemann (Izquierda, Derecha, Punto Medio) y Trapecios.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md border border-gray-100 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">1. Pares de Datos (X, Y)</h2>
+                    <p class="text-sm text-gray-500 mb-4">Ingresa o modifica los puntos medidos:</p>
+                    
+                    <div id="data-inputs" class="space-y-2 max-h-60 overflow-y-auto pr-2 mb-4">
+                        </div>
+
+                    <div class="flex gap-2 mb-6">
+                        <button onclick="addRow()" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-2 px-3 rounded-lg text-sm transition border border-indigo-200">+ Añadir Punto</button>
+                        <button onclick="loadDefaultData()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg text-sm transition">Restaurar</button>
+                    </div>
+
+                    <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">2. Configuración de Cálculo</h2>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Método de Altura:</label>
+                        <select id="method-select" onchange="updateSimulation()" class="w-full border-gray-300 rounded-lg shadow-sm border p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="left">Extremo Izquierdo</option>
+                            <option value="right">Extremo Derecho</option>
+                            <option value="midpoint" selected>Punto Medio</option>
+                            <option value="trapezoid">Regla del Trapecio</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                            <span>Número de Intervalos ($n$):</span>
+                            <span id="n-value" class="font-bold text-indigo-600">5</span>
+                        </div>
+                        <input type="range" id="n-slider" min="1" max="50" value="5" oninput="updateSimulation()" class="w-full accent-indigo-600">
+                    </div>
+                </div>
+
+                <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-center mt-4">
+                    <span class="text-xs font-bold uppercase tracking-wider text-indigo-500 block mb-1">Área Estimada Total</span>
+                    <span id="result-area" class="text-3xl font-black text-indigo-700">0.00</span>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-gray-100 flex flex-col justify-center">
+                <div class="relative w-full h-[450px]">
+                    <canvas id="curveChart"></canvas>
+                </div>
+                <div class="mt-4 text-xs text-gray-500 text-center">
+                    * La línea azul representa la interpolación lineal entre los datos medidos. Las figuras representan la aproximación numérica seleccionada.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Datos iniciales por defecto (Tiempo, Variable)
+        let dataPoints = [
+            { x: 0, y: 2 },
+            { x: 1, y: 3.5 },
+            { x: 2, y: 3 },
+            { x: 3, y: 5 },
+            { x: 4, y: 4.5 },
+            { x: 5, y: 6 }
+        ];
+
+        let chartInstance = null;
+
+        // Inicializar la aplicación al cargar la página
+        window.onload = function() {
+            renderTable();
+            updateSimulation();
+        };
+
+        function renderTable() {
+            const container = document.getElementById('data-inputs');
+            container.innerHTML = '';
+            dataPoints.forEach((pt, index) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2';
+                row.innerHTML = `
+                    <span class="text-xs text-gray-400 w-4">${index + 1}.</span>
+                    <input type="number" step="any" value="${pt.x}" onchange="updatePoint(${index}, 'x', this.value)" class="w-1/2 border rounded px-2 py-1 text-sm border-gray-300" placeholder="X">
+                    <input type="number" step="any" value="${pt.y}" onchange="updatePoint(${index}, 'y', this.value)" class="w-1/2 border rounded px-2 py-1 text-sm border-gray-300" placeholder="Y">
+                    <button onclick="removeRow(${index})" class="text-red-400 hover:text-red-600 font-bold px-2 text-sm">&times;</button>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function addRow() {
+            const lastX = dataPoints.length > 0 ? parseFloat(dataPoints[dataPoints.length - 1].x) + 1 : 0;
+            dataPoints.push({ x: lastX, y: 0 });
+            sortData();
+            renderTable();
+            updateSimulation();
+        }
+
+        function removeRow(index) {
+            if (dataPoints.length <= 2) {
+                alert("Se requieren al menos 2 puntos para calcular el área.");
+                return;
+            }
+            dataPoints.splice(index, 1);
+            renderTable();
+            updateSimulation();
+        }
+
+        function updatePoint(index, coord, value) {
+            dataPoints[index][coord] = parseFloat(value) || 0;
+            sortData();
+            renderTable();
+            updateSimulation();
+        }
+
+        function sortData() {
+            dataPoints.sort((a, b) => a.x - b.x);
+        }
+
+        function loadDefaultData() {
+            dataPoints = [
+                { x: 0, y: 2 },
+                { x: 1, y: 3.5 },
+                { x: 2, y: 3 },
+                { x: 3, y: 5 },
+                { x: 4, y: 4.5 },
+                { x: 5, y: 6 }
+            ];
+            renderTable();
+            updateSimulation();
+        }
+
+        // Función de interpolación lineal basada en los puntos medidos dados
+        function interpolate(xVal) {
+            if (xVal <= dataPoints[0].x) return dataPoints[0].y;
+            if (xVal >= dataPoints[dataPoints.length - 1].x) return dataPoints[dataPoints.length - 1].y;
+
+            for (let i = 0; i < dataPoints.length - 1; i++) {
+                let p1 = dataPoints[i];
+                let p2 = dataPoints[i + 1];
+                if (xVal >= p1.x && xVal <= p2.x) {
+                    let slope = (p2.y - p1.y) / (p2.x - p1.x);
+                    return p1.y + slope * (xVal - p1.x);
+                }
+            }
+            return 0;
+        }
+
+        function updateSimulation() {
+            const n = parseInt(document.getElementById('n-slider').value);
+            document.getElementById('n-value').innerText = n;
+            const method = document.getElementById('method-select').value;
+
+            const xMin = dataPoints[0].x;
+            const xMax = dataPoints[dataPoints.length - 1].x;
+            const dx = (xMax - xMin) / n;
+
+            let totalArea = 0;
+            let approxDatasets = [];
+
+            // Generar la curva base continua para la gráfica
+            let curvePoints = [];
+            let resolution = 200;
+            let step = (xMax - xMin) / resolution;
+            for (let i = 0; i <= resolution; i++) {
+                let x = xMin + i * step;
+                curvePoints.push({ x: x, y: interpolate(x) });
+            }
+
+            // Calcular aproximación por rectángulos o trapecios
+            for (let i = 0; i < n; i++) {
+                let xStart = xMin + i * dx;
+                let xEnd = xStart + dx;
+                let height = 0;
+
+                if (method === 'left') {
+                    height = interpolate(xStart);
+                    approxDatasets.push({
+                        data: [{x: xStart, y: 0}, {x: xStart, y: height}, {x: xEnd, y: height}, {x: xEnd, y: 0}],
+                        borderColor: 'rgba(79, 70, 229, 0.6)',
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderWidth: 1,
+                        fill: true,
+                        pointRadius: 0
+                    });
+                    totalArea += height * dx;
+                } else if (method === 'right') {
+                    height = interpolate(xEnd);
+                    approxDatasets.push({
+                        data: [{x: xStart, y: 0}, {x: xStart, y: height}, {x: xEnd, y: height}, {x: xEnd, y: 0}],
+                        borderColor: 'rgba(79, 70, 229, 0.6)',
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderWidth: 1,
+                        fill: true,
+                        pointRadius: 0
+                    });
+                    totalArea += height * dx;
+                } else if (method === 'midpoint') {
+                    let xMid = (xStart + xEnd) / 2;
+                    height = interpolate(xMid);
+                    approxDatasets.push({
+                        data: [{x: xStart, y: 0}, {x: xStart, y: height}, {x: xEnd, y: height}, {x: xEnd, y: 0}],
+                        borderColor: 'rgba(79, 70, 229, 0.6)',
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderWidth: 1,
+                        fill: true,
+                        pointRadius: 0
+                    });
+                    totalArea += height * dx;
+                } else if (method === 'trapezoid') {
+                    let yStart = interpolate(xStart);
+                    let yEnd = interpolate(xEnd);
+                    approxDatasets.push({
+                        data: [{x: xStart, y: 0}, {x: xStart, y: yStart}, {x: xEnd, y: yEnd}, {x: xEnd, y: 0}],
+                        borderColor: 'rgba(16, 185, 129, 0.6)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        borderWidth: 1,
+                        fill: true,
+                        pointRadius: 0
+                    });
+                    totalArea += ((yStart + yEnd) / 2) * dx;
+                }
+            }
+
+            document.getElementById('result-area').innerText = totalArea.toFixed(4);
+
+            // Renderizar Gráfica con Chart.js
+            const ctx = document.getElementById('curveChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            let mainCurveDataset = {
+                label: 'Curva Medida',
+                data: curvePoints,
+                borderColor: 'rgb(79, 70, 229)',
+                borderWidth: 3,
+                pointRadius: 0,
+                fill: false,
+                type: 'line'
+            };
+
+            let dataPointsScatter = {
+                label: 'Puntos Medidos',
+                data: dataPoints,
+                backgroundColor: 'rgb(220, 38, 38)',
+                pointRadius: 6,
+                type: 'scatter'
+            };
+
+            chartInstance = new Chart(ctx, {
+                data: {
+                    datasets: [mainCurveDataset, dataPointsScatter, ...approxDatasets]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: { display: true, text: 'Tiempo / Eje X' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Variable / Eje Y' },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
