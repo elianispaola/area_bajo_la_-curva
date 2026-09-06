@@ -177,7 +177,7 @@ function draw() {
   const dx = (endX - startX) / N;
   let totalArea = 0;
 
-  // 1. Rectángulos
+  // Rectángulos
   for (let i = 0; i < N; i++) {
     const xLeft = startX + i * dx;
     const xRight = xLeft + dx;
@@ -203,7 +203,7 @@ function draw() {
     ctx.strokeRect(cxLeft, cyTop, cxRight - cxLeft, cyBase - cyTop);
   }
 
-  // 2. Sombreado
+  // Sombreado
   ctx.beginPath();
   ctx.moveTo(toCanvasX(startX), toCanvasY(0));
   const steps = 300;
@@ -216,7 +216,7 @@ function draw() {
   ctx.fillStyle = 'rgba(37, 99, 235, 0.15)';
   ctx.fill();
 
-  // 3. Curva Suave
+  // Curva Suave
   ctx.beginPath();
   for (let i = 0; i <= steps; i++) {
     const x = startX + (i / steps) * (endX - startX);
@@ -229,7 +229,7 @@ function draw() {
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // 4. Puntos Medidos
+  // Puntos Medidos
   ctx.fillStyle = '#dc2626';
   for (let p of points) {
     ctx.beginPath();
@@ -237,13 +237,13 @@ function draw() {
     ctx.fill();
   }
 
-  // 5. Ejes y Cuadrícula Fijos
+  // Ejes y Cuadrícula Fijos
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 1;
   ctx.fillStyle = '#64748b';
   ctx.font = '11px sans-serif';
 
-  // Marcas Eje Y
+  // Eje Y
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (let val = 0; val <= 100; val += 10) {
@@ -255,7 +255,7 @@ function draw() {
     ctx.stroke();
   }
 
-  // Marcas Eje X
+  // Eje X
   const xLabels = [8, 9, 10, 11, 12, 1, 2, 3];
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
@@ -268,7 +268,7 @@ function draw() {
     ctx.stroke();
   });
 
-  // Líneas Principales
+  // Líneas Principales de Ejes
   ctx.strokeStyle = '#334155';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -278,10 +278,10 @@ function draw() {
   ctx.lineTo(paddingLeft, canvas.height - paddingBottom);
   ctx.stroke();
 
-  // 6. Nombres de los Ejes
+  // Nombres de los Ejes
   ctx.fillStyle = '#1e293b';
   
-  // Nombre del Eje Y
+  // Etiqueta Eje Y
   ctx.save();
   ctx.translate(20, (canvas.height - paddingBottom + paddingTop) / 2);
   ctx.rotate(-Math.PI / 2);
@@ -290,7 +290,7 @@ function draw() {
   ctx.fillText('% de Carga del Celular', 0, 0);
   ctx.restore();
 
-  // Nombre del Eje X
+  // Etiqueta Eje X
   ctx.font = 'bold 13px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('(t) Horas', (canvas.width + paddingLeft - paddingRight) / 2, canvas.height - 18);
