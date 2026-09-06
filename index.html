@@ -1,7 +1,186 @@
-// 1. Dibujar Rectángulos con colores dinámicos (HSL)
-  ctx.strokeStyle = '#0f172a';
-  ctx.lineWidth = 1.5;
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulador de Sumas de Riemann</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 20px; background: #f8fafc; color: #1e293b; }
+    .container { display: flex; gap: 20px; flex-wrap: wrap; }
+    .controls { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 340px; }
+    .canvas-container { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); flex: 1; min-width: 400px; }
+    label { display: block; margin-top: 12px; font-weight: 600; font-size: 0.9rem; }
+    textarea { width: 100%; height: 120px; font-family: monospace; padding: 8px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; }
+    select, input[type="range"] { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1; }
+    button { 
+      margin-top: 15px; width: 100%; padding: 10px; background: #2563eb; color: white; 
+      border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s;
+    }
+    button:hover { background: #1d4ed8; }
+    .results-panel { margin-top: 15px; padding: 12px; background: #f1f5f9; border-radius: 8px; }
+    .result-item { margin-bottom: 8px; font-size: 0.95rem; }
+    .result-item:last-child { margin-bottom: 0; }
+    .result-value { font-weight: bold; color: #0f172a; }
+  </style>
+</head>
+<body>
 
+<h2>Simulación de Área bajo la Curva (Sumas de Riemann)</h2>
+
+<div class="container">
+  <div class="controls">
+    <label for="dataInput">Puntos (Hora, % Carga):</label>
+    <textarea id="dataInput">8, 20
+9, 35
+10, 50
+11, 75
+12, 90
+1, 85
+2, 60
+3, 40</textarea>
+
+    <button id="updateBtn">Actualizar Datos</button>
+
+    <label for="methodSelect">Criterio de altura:</label>
+    <select id="methodSelect">
+      <option value="left">Extremo Izquierdo</option>
+      <option value="right">Extremo Derecho</option>
+      <option value="midpoint">Punto Medio</option>
+    </select>
+
+    <label for="rectSlider">Número de Rectángulos (N): <span id="rectVal">7</span></label>
+    <input type="range" id="rectSlider" min="1" max="50" value="7">
+
+    <div class="results-panel">
+      <div class="result-item">Área estimada: <span class="result-value" id="resEstimada">0</span></div>
+      <div class="result-item">Valor real integral: <span class="result-value" id="resReal">0</span></div>
+      <div class="result-item">Diferencia absoluta: <span class="result-value" id="resDiferencia">0</span></div>
+    </div>
+  </div>
+
+  <div class="canvas-container">
+    <canvas id="plotCanvas" width="650" height="450"></canvas>
+  </div>
+</div>
+
+<script>
+const dataInput = document.getElementById('dataInput');
+const updateBtn = document.getElementById('updateBtn');
+const methodSelect = document.getElementById('methodSelect');
+const rectSlider = document.getElementById('rectSlider');
+const rectVal = document.getElementById('rectVal');
+const resEstimada = document.getElementById('resEstimada');
+const resReal = document.getElementById('resReal');
+const resDiferencia = document.getElementById('resDiferencia');
+const canvas = document.getElementById('plotCanvas');
+const ctx = canvas.getContext('2d');
+
+const paddingLeft = 60, paddingBottom = 50, paddingTop = 30, paddingRight = 30;
+
+// Mapeo lineal de horas al rango [0, 7]
+function horaAIndice(hora) {
+  if (hora >= 8 && hora <= 12) return hora - 8;
+  if (hora >= 1 && hora <= 3) return hora + 4;
+  return hora;
+}
+
+function parsePoints() {
+  const lines = dataInput.value.trim().split('\n');
+  const points = [];
+  for (let line of lines) {
+    const parts = line.split(',');
+    if (parts.length === 2) {
+      const hora = parseFloat(parts[0].trim());
+      const y = parseFloat(parts[1].trim());
+      if (!isNaN(hora) && !isNaN(y)) {
+        points.push({ x: horaAIndice(hora), y });
+      }
+    }
+  }
+  return points.sort((a, b) => a.x - b.x);
+}
+
+// Generador Spline Cúbico Monótono
+function createMonotoneCubicSpline(points) {
+  const n = points.length;
+  if (n < 2) return (x) => 0;
+
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  
+  const dxs = [], ms = [];
+  for (let i = 0; i < n - 1; i++) {
+    dxs.push(xs[i+1] - xs[i]);
+    ms.push((ys[i+1] - ys[i]) / dxs[i]);
+  }
+
+  const c1s = [ms[0]];
+  for (let i = 0; i < dxs.length - 1; i++) {
+    const m = ms[i], mNext = ms[i+1];
+    if (m * mNext <= 0) {
+      c1s.push(0);
+    } else {
+      const dx_ = dxs[i], dxNext = dxs[i+1];
+      const common = dx_ + dxNext;
+      c1s.push(3 * common / ((common + dxNext) / m + (common + dx_) / mNext));
+    }
+  }
+  c1s.push(ms[ms.length - 1]);
+
+  const c2s = [], c3s = [];
+  for (let i = 0; i < c1s.length - 1; i++) {
+    const c1 = c1s[i], m = ms[i], invDx = 1 / dxs[i];
+    const common = c1 + c1s[i+1] - 2 * m;
+    c2s.push((m - c1 - common) * invDx);
+    c3s.push(common * invDx * invDx);
+  }
+
+  return function(x) {
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[n - 1]) return ys[n - 1];
+    let i = xs.length - 1;
+    while (i > 0 && xs[i] > x) i--;
+    const diff = x - xs[i];
+    return ys[i] + c1s[i] * diff + c2s[i] * diff * diff + c3s[i] * diff * diff * diff;
+  };
+}
+
+function getDistinctColor(index, alpha = 0.85) {
+  const hue = (index * 137.508) % 360; 
+  return `hsla(${hue}, 75%, 55%, ${alpha})`;
+}
+
+function draw() {
+  const points = parsePoints();
+  const N = parseInt(rectSlider.value);
+  const method = methodSelect.value;
+  rectVal.textContent = N;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (points.length < 2) {
+    resEstimada.textContent = '---';
+    resReal.textContent = '---';
+    resDiferencia.textContent = '---';
+    return;
+  }
+
+  const spline = createMonotoneCubicSpline(points);
+
+  // Límites fijos para mapear exactamente las etiquetas solicitadas
+  const xMin = 0; 
+  const xMax = 7;
+  const yMin = 0;
+  const yMax = 100;
+
+  const toCanvasX = (x) => paddingLeft + ((x - xMin) / (xMax - xMin)) * (canvas.width - paddingLeft - paddingRight);
+  const toCanvasY = (y) => canvas.height - paddingBottom - ((y - yMin) / (yMax - yMin)) * (canvas.height - paddingTop - paddingBottom);
+
+  const startX = points[0].x;
+  const endX = points[points.length - 1].x;
+  const dx = (endX - startX) / N;
+  let totalArea = 0;
+
+  // 1. Dibujar Rectángulos con colores únicos
   for (let i = 0; i < N; i++) {
     const xLeft = startX + i * dx;
     const xRight = xLeft + dx;
@@ -11,7 +190,7 @@
     else if (method === 'right') xEval = xRight;
     else if (method === 'midpoint') xEval = xLeft + dx / 2;
 
-    const heightVal = interpolate(xEval, points);
+    const heightVal = spline(xEval);
     totalArea += heightVal * dx;
 
     const cxLeft = toCanvasX(xLeft);
@@ -19,10 +198,115 @@
     const cyTop = toCanvasY(heightVal);
     const cyBase = toCanvasY(0);
 
-    // Generar un color único para cada rectángulo usando HSL
-    const hue = (i * 360 / N) % 360;
-    ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.7)`;
+    ctx.fillStyle = getDistinctColor(i, 0.75);
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1;
 
     ctx.fillRect(cxLeft, cyTop, cxRight - cxLeft, cyBase - cyTop);
     ctx.strokeRect(cxLeft, cyTop, cxRight - cxLeft, cyBase - cyTop);
   }
+
+  // 2. Sombreado bajo la curva
+  ctx.beginPath();
+  ctx.moveTo(toCanvasX(startX), toCanvasY(0));
+  const steps = 300;
+  for (let i = 0; i <= steps; i++) {
+    const x = startX + (i / steps) * (endX - startX);
+    ctx.lineTo(toCanvasX(x), toCanvasY(spline(x)));
+  }
+  ctx.lineTo(toCanvasX(endX), toCanvasY(0));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(37, 99, 235, 0.15)';
+  ctx.fill();
+
+  // 3. Curva Suave
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const x = startX + (i / steps) * (endX - startX);
+    const cx = toCanvasX(x);
+    const cy = toCanvasY(spline(x));
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  }
+  ctx.strokeStyle = '#1d4ed8';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // 4. Puntos Medidos
+  ctx.fillStyle = '#dc2626';
+  for (let p of points) {
+    ctx.beginPath();
+    ctx.arc(toCanvasX(p.x), toCanvasY(p.y), 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 5. Ejes y Cuadrícula Fijos
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px sans-serif';
+
+  // Eje Y: (0 a 100 de 10 en 10)
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let val = 0; val <= 100; val += 10) {
+    const cy = toCanvasY(val);
+    ctx.fillText(val, paddingLeft - 8, cy);
+    ctx.beginPath();
+    ctx.moveTo(paddingLeft, cy);
+    ctx.lineTo(canvas.width - paddingRight, cy);
+    ctx.stroke();
+  }
+
+  // Eje X: (8, 9, 10, 11, 12, 1, 2, 3)
+  const xLabels = [8, 9, 10, 11, 12, 1, 2, 3];
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  xLabels.forEach((label, idx) => {
+    const cx = toCanvasX(idx);
+    ctx.fillText(label, cx, canvas.height - paddingBottom + 8);
+    ctx.beginPath();
+    ctx.moveTo(cx, canvas.height - paddingBottom);
+    ctx.lineTo(cx, paddingTop);
+    ctx.stroke();
+  });
+
+  // Líneas Principales de los Ejes
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(paddingLeft, canvas.height - paddingBottom);
+  ctx.lineTo(canvas.width - paddingRight, canvas.height - paddingBottom);
+  ctx.moveTo(paddingLeft, paddingTop);
+  ctx.lineTo(paddingLeft, canvas.height - paddingBottom);
+  ctx.stroke();
+
+  // Integración Numérica Precisa para el Valor Real (Método de Simpson)
+  const nSimp = 1000;
+  const hSimp = (endX - startX) / nSimp;
+  let integralExacta = spline(startX) + spline(endX);
+  for (let i = 1; i < nSimp; i++) {
+    const x = startX + i * hSimp;
+    integralExacta += spline(x) * (i % 2 === 0 ? 2 : 4);
+  }
+  integralExacta *= (hSimp / 3);
+
+  const absDiff = Math.abs(totalArea - integralExacta);
+
+  // Presentación de Resultados Directos
+  resEstimada.textContent = totalArea.toFixed(3);
+  resReal.textContent = integralExacta.toFixed(3);
+  resDiferencia.textContent = absDiff.toFixed(3);
+}
+
+// Event Listeners
+updateBtn.addEventListener('click', draw);
+methodSelect.addEventListener('change', draw);
+rectSlider.addEventListener('input', draw);
+
+// Render inicial
+draw();
+</script>
+
+</body>
+</html>
