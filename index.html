@@ -74,9 +74,8 @@ const resDiferencia = document.getElementById('resDiferencia');
 const canvas = document.getElementById('plotCanvas');
 const ctx = canvas.getContext('2d');
 
-const paddingLeft = 60, paddingBottom = 50, paddingTop = 30, paddingRight = 30;
+const paddingLeft = 70, paddingBottom = 60, paddingTop = 30, paddingRight = 30;
 
-// Mapeo lineal de horas al rango [0, 7]
 function horaAIndice(hora) {
   if (hora >= 8 && hora <= 12) return hora - 8;
   if (hora >= 1 && hora <= 3) return hora + 4;
@@ -99,7 +98,6 @@ function parsePoints() {
   return points.sort((a, b) => a.x - b.x);
 }
 
-// Generador Spline Cúbico Monótono
 function createMonotoneCubicSpline(points) {
   const n = points.length;
   if (n < 2) return (x) => 0;
@@ -166,7 +164,6 @@ function draw() {
 
   const spline = createMonotoneCubicSpline(points);
 
-  // Límites fijos para mapear exactamente las etiquetas solicitadas
   const xMin = 0; 
   const xMax = 7;
   const yMin = 0;
@@ -180,7 +177,7 @@ function draw() {
   const dx = (endX - startX) / N;
   let totalArea = 0;
 
-  // 1. Dibujar Rectángulos con colores únicos
+  // 1. Rectángulos
   for (let i = 0; i < N; i++) {
     const xLeft = startX + i * dx;
     const xRight = xLeft + dx;
@@ -206,7 +203,7 @@ function draw() {
     ctx.strokeRect(cxLeft, cyTop, cxRight - cxLeft, cyBase - cyTop);
   }
 
-  // 2. Sombreado bajo la curva
+  // 2. Sombreado
   ctx.beginPath();
   ctx.moveTo(toCanvasX(startX), toCanvasY(0));
   const steps = 300;
@@ -246,7 +243,7 @@ function draw() {
   ctx.fillStyle = '#64748b';
   ctx.font = '11px sans-serif';
 
-  // Eje Y: (0 a 100 de 10 en 10)
+  // Marcas Eje Y
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (let val = 0; val <= 100; val += 10) {
@@ -258,7 +255,7 @@ function draw() {
     ctx.stroke();
   }
 
-  // Eje X: (8, 9, 10, 11, 12, 1, 2, 3)
+  // Marcas Eje X
   const xLabels = [8, 9, 10, 11, 12, 1, 2, 3];
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
@@ -271,7 +268,7 @@ function draw() {
     ctx.stroke();
   });
 
-  // Líneas Principales de los Ejes
+  // Líneas Principales
   ctx.strokeStyle = '#334155';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -281,7 +278,24 @@ function draw() {
   ctx.lineTo(paddingLeft, canvas.height - paddingBottom);
   ctx.stroke();
 
-  // Integración Numérica Precisa para el Valor Real (Método de Simpson)
+  // 6. Nombres de los Ejes
+  ctx.fillStyle = '#1e293b';
+  
+  // Nombre del Eje Y
+  ctx.save();
+  ctx.translate(20, (canvas.height - paddingBottom + paddingTop) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('% de Carga del Celular', 0, 0);
+  ctx.restore();
+
+  // Nombre del Eje X
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('(t) Horas', (canvas.width + paddingLeft - paddingRight) / 2, canvas.height - 18);
+
+  // Integración Numérica (Simpson)
   const nSimp = 1000;
   const hSimp = (endX - startX) / nSimp;
   let integralExacta = spline(startX) + spline(endX);
@@ -293,18 +307,16 @@ function draw() {
 
   const absDiff = Math.abs(totalArea - integralExacta);
 
-  // Presentación de Resultados Directos
+  // Presentación de Resultados
   resEstimada.textContent = totalArea.toFixed(3);
   resReal.textContent = integralExacta.toFixed(3);
   resDiferencia.textContent = absDiff.toFixed(3);
 }
 
-// Event Listeners
 updateBtn.addEventListener('click', draw);
 methodSelect.addEventListener('change', draw);
 rectSlider.addEventListener('input', draw);
 
-// Render inicial
 draw();
 </script>
 
