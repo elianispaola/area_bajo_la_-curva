@@ -6,11 +6,22 @@
   <style>
     body { font-family: sans-serif; margin: 20px; background: #f9f9f9; }
     .container { display: flex; gap: 20px; flex-wrap: wrap; }
-    .controls { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 300px; }
+    .controls { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 320px; }
     .canvas-container { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
     label { display: block; margin-top: 10px; font-weight: bold; }
-    textarea { width: 100%; height: 100px; }
-    select, input[type="range"] { width: 100%; }
+    textarea { width: 100%; height: 100px; font-family: monospace; }
+    select, input[type="range"], button { width: 100%; box-sizing: border-box; }
+    button { 
+      margin-top: 15px; 
+      padding: 10px; 
+      background: #2c3e50; 
+      color: white; 
+      border: none; 
+      border-radius: 4px; 
+      font-weight: bold; 
+      cursor: pointer; 
+    }
+    button:hover { background: #1a252f; }
     .result { margin-top: 15px; padding: 10px; background: #eef; border-radius: 4px; font-weight: bold; }
   </style>
 </head>
@@ -20,13 +31,18 @@
 
 <div class="container">
   <div class="controls">
-    <label for="dataInput">Puntos (Tiempo, Valor):</label>
-    <textarea id="dataInput">0, 2
-2, 5
-4, 3
-6, 8
-8, 6
-10, 9</textarea>
+    <label for="dataInput">Puntos (Hora, % Carga):</label>
+    <textarea id="dataInput">8, 20
+9, 35
+10, 50
+11, 75
+12, 90
+1, 85
+2, 60
+3, 40</textarea>
+
+    <!-- Botón para actualizar datos explícitamente -->
+    <button id="updateBtn">Actualizar Datos</button>
 
     <label for="methodSelect">Método de evaluación:</label>
     <select id="methodSelect">
@@ -35,20 +51,21 @@
       <option value="midpoint">Punto Medio (Centro)</option>
     </select>
 
-    <label for="rectSlider">Número de Rectángulos (N): <span id="rectVal">6</span></label>
-    <input type="range" id="rectSlider" min="1" max="50" value="6">
+    <label for="rectSlider">Número de Rectángulos (N): <span id="rectVal">7</span></label>
+    <input type="range" id="rectSlider" min="1" max="50" value="7">
 
     <div class="result" id="resultArea">Área estimada: 0</div>
   </div>
 
   <div class="canvas-container">
-    <canvas id="plotCanvas" width="600" height="400"></canvas>
+    <canvas id="plotCanvas" width="650" height="450"></canvas>
   </div>
 </div>
 
 <script>
 // Referencias del DOM
 const dataInput = document.getElementById('dataInput');
+const updateBtn = document.getElementById('updateBtn');
 const methodSelect = document.getElementById('methodSelect');
 const rectSlider = document.getElementById('rectSlider');
 const rectVal = document.getElementById('rectVal');
@@ -56,27 +73,47 @@ const resultArea = document.getElementById('resultArea');
 const canvas = document.getElementById('plotCanvas');
 const ctx = canvas.getContext('2d');
 
-// Parámetros de la vista del Canvas
-const padding = 40;
+const paddingLeft = 60;
+const paddingBottom = 50;
+const paddingTop = 30;
+const paddingRight = 30;
 
-// Parsea y ordena el texto introducido
+// Mapeo continuo de horas personalizadas a una línea de tiempo lineal (0 a 7)
+function horaAIndice(hora) {
+  if (hora >= 8 && hora <= 12) return hora - 8;
+  if (hora >= 1 && hora <= 3) return hora + 4;
+  return hora;
+}
+
+// Mapeo inverso de índice continuo a texto de hora
+function indiceAHoraText(idx) {
+  const horas = [8, 9, 10, 11, 12, 1, 2, 3];
+  const floorIdx = Math.floor(idx);
+  if (floorIdx >= 0 && floorIdx < horas.length) {
+    return horas[floorIdx].toString();
+  }
+  return idx.toFixed(1);
+}
+
+// Parsea los puntos de texto
 function parsePoints() {
   const lines = dataInput.value.trim().split('\n');
   const points = [];
   for (let line of lines) {
     const parts = line.split(',');
     if (parts.length === 2) {
-      const x = parseFloat(parts[0].trim());
+      const hora = parseFloat(parts[0].trim());
       const y = parseFloat(parts[1].trim());
-      if (!isNaN(x) && !isNaN(y)) {
-        points.push({ x, y });
+      if (!isNaN(hora) && !isNaN(y)) {
+        const xLinear = horaAIndice(hora);
+        points.push({ x: xLinear, y, originalHora: hora });
       }
     }
   }
   return points.sort((a, b) => a.x - b.x);
 }
 
-// Interpolación lineal entre los datos experimentales
+// Interpolación lineal entre datos
 function interpolate(x, points) {
   if (points.length === 0) return 0;
   if (x <= points[0].x) return points[0].y;
@@ -91,7 +128,6 @@ function interpolate(x, points) {
   return 0;
 }
 
-// Dibujar y calcular
 function draw() {
   const points = parsePoints();
   const N = parseInt(rectSlider.value);
@@ -105,26 +141,27 @@ function draw() {
     return;
   }
 
-  // Rango de datos
-  const xMin = points[0].x;
-  const xMax = points[points.length - 1].x;
+  // Límites fijos según los requerimientos
+  const xMin = 0; // Corresponde a la hora 8
+  const xMax = 7; // Corresponde a la hora 3
   const yMin = 0;
-  const yMax = Math.max(...points.map(p => p.y)) * 1.1;
+  const yMax = 100;
 
-  // Funciones de mapeo a coordenadas canvas
-  const toCanvasX = (x) => padding + ((x - xMin) / (xMax - xMin)) * (canvas.width - 2 * padding);
-  const toCanvasY = (y) => canvas.height - padding - ((y - yMin) / (yMax - yMin)) * (canvas.height - 2 * padding);
+  // Transformación a coordenadas Canvas
+  const toCanvasX = (x) => paddingLeft + ((x - xMin) / (xMax - xMin)) * (canvas.width - paddingLeft - paddingRight);
+  const toCanvasY = (y) => canvas.height - paddingBottom - ((y - yMin) / (yMax - yMin)) * (canvas.height - paddingTop - paddingBottom);
 
-  const dx = (xMax - xMin) / N;
+  const dx = (points[points.length - 1].x - points[0].x) / N;
+  const startX = points[0].x;
   let totalArea = 0;
 
-  // 1. Dibujar Rectángulos de Riemann
-  ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
-  ctx.strokeStyle = 'rgba(41, 128, 185, 0.8)';
-  ctx.lineWidth = 1;
+  // 1. Dibujar Rectángulos con colores oscuros
+  ctx.fillStyle = 'rgba(24, 43, 73, 0.85)';
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 1.5;
 
   for (let i = 0; i < N; i++) {
-    const xLeft = xMin + i * dx;
+    const xLeft = startX + i * dx;
     const xRight = xLeft + dx;
     let xEval;
 
@@ -135,7 +172,6 @@ function draw() {
     const heightVal = interpolate(xEval, points);
     totalArea += heightVal * dx;
 
-    // Coordenadas en canvas
     const cxLeft = toCanvasX(xLeft);
     const cxRight = toCanvasX(xRight);
     const cyTop = toCanvasY(heightVal);
@@ -145,7 +181,7 @@ function draw() {
     ctx.strokeRect(cxLeft, cyTop, cxRight - cxLeft, cyBase - cyTop);
   }
 
-  // 2. Dibujar Área Sombreada Bajo la Curva
+  // 2. Área sombreada bajo la curva
   ctx.beginPath();
   ctx.moveTo(toCanvasX(points[0].x), toCanvasY(0));
   for (let p of points) {
@@ -153,7 +189,7 @@ function draw() {
   }
   ctx.lineTo(toCanvasX(points[points.length - 1].x), toCanvasY(0));
   ctx.closePath();
-  ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
+  ctx.fillStyle = 'rgba(52, 152, 219, 0.2)';
   ctx.fill();
 
   // 3. Dibujar Curva Interpolada
@@ -162,7 +198,7 @@ function draw() {
   for (let p of points) {
     ctx.lineTo(toCanvasX(p.x), toCanvasY(p.y));
   }
-  ctx.strokeStyle = '#27ae60';
+  ctx.strokeStyle = '#2980b9';
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
@@ -174,22 +210,69 @@ function draw() {
     ctx.fill();
   }
 
-  // 5. Dibujar Ejes
-  ctx.strokeStyle = '#333';
+  // 5. Dibujar Ejes y Cuadrícula
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 0.5;
+  ctx.fillStyle = '#333';
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  // Marcas Eje Y (0 a 100 de 10 en 10)
+  for (let yVal = 0; yVal <= 100; yVal += 10) {
+    const cy = toCanvasY(yVal);
+    ctx.fillText(yVal, paddingLeft - 8, cy);
+    
+    ctx.beginPath();
+    ctx.moveTo(paddingLeft, cy);
+    ctx.lineTo(canvas.width - paddingRight, cy);
+    ctx.stroke();
+  }
+
+  // Marcas Eje X (8, 9, 10, 11, 12, 1, 2, 3)
+  const xLabels = [8, 9, 10, 11, 12, 1, 2, 3];
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+
+  xLabels.forEach((label, idx) => {
+    const cx = toCanvasX(idx);
+    ctx.fillText(label, cx, canvas.height - paddingBottom + 8);
+
+    ctx.beginPath();
+    ctx.moveTo(cx, canvas.height - paddingBottom);
+    ctx.lineTo(cx, paddingTop);
+    ctx.stroke();
+  });
+
+  // Ejes principales
+  ctx.strokeStyle = '#000';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(padding, canvas.height - padding);
-  ctx.lineTo(canvas.width - padding, canvas.height - padding);
-  ctx.moveTo(padding, padding);
-  ctx.lineTo(padding, canvas.height - padding);
+  ctx.moveTo(paddingLeft, canvas.height - paddingBottom);
+  ctx.lineTo(canvas.width - paddingRight, canvas.height - paddingBottom);
+  ctx.moveTo(paddingLeft, paddingTop);
+  ctx.lineTo(paddingLeft, canvas.height - paddingBottom);
   ctx.stroke();
 
-  // Mostrar Resultado
-  resultArea.textContent = `Área estimada: ${totalArea.toFixed(4)}`;
+  // Etiqueta Eje Y
+  ctx.save();
+  ctx.translate(18, canvas.height / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('% de Carga del Celular', 0, 0);
+  ctx.restore();
+
+  // Etiqueta Eje X
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('(t) Horas', (canvas.width + paddingLeft) / 2, canvas.height - 18);
+
+  // Resultado
+  resultArea.textContent = `Área estimada: ${totalArea.toFixed(2)} (%·h)`;
 }
 
-// Event Listeners
-dataInput.addEventListener('input', draw);
+// Listeners
+updateBtn.addEventListener('click', draw);
 methodSelect.addEventListener('change', draw);
 rectSlider.addEventListener('input', draw);
 
